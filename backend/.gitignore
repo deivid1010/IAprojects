@@ -1,0 +1,20 @@
+# Dependencias y compilados
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Variables de entorno: contienen la API key de OpenAI y la clave maestra de cifrado.
+# Solo se versiona la plantilla .env.example.
+.env
+.env.*
+!.env.example
+
+# Logs y reportes
+*.log
+npm-debug.log*
+coverage/
+
+# Editor y sistema
+.vscode/
+.idea/
+.DS_Store

@@ -1,0 +1,55 @@
+{
+  "name": "clinic-assistant-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Asistente de agendamiento con IA para clínicas (prueba técnica WeKall)",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/server.ts",
+    "build": "tsc -p tsconfig.build.json && cp -r src/db/migrations dist/db/ && cp -r src/seed/docs dist/seed/",
+    "start": "node dist/server.js",
+    "migrate": "tsx --env-file=.env src/db/migrate.ts",
+    "migrate:prod": "node dist/db/migrate.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "seed": "tsx --env-file=.env src/seed/seed.ts",
+    "seed:prod": "node dist/seed/seed.js",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "worker": "tsx watch --env-file=.env src/worker.ts",
+    "worker:prod": "node dist/worker.js",
+    "chat": "tsx --env-file=.env scripts/chat.ts",
+    "index": "tsx --env-file=.env src/knowledge/indexCli.ts",
+    "index:prod": "node dist/knowledge/indexCli.js",
+    "eval": "tsx --env-file=.env scripts/eval.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-sqs": "^3.1146.0",
+    "@fastify/cors": "^11.3.0",
+    "@fastify/multipart": "^9.4.0",
+    "fastify": "^5.12.5",
+    "luxon": "^3.7.2",
+    "mammoth": "^1.13.0",
+    "mongodb": "^6.21.0",
+    "openai": "^7.28.0",
+    "pg": "^8.23.1",
+    "pino": "^9.14.0",
+    "turndown": "^7.2.4",
+    "unpdf": "^1.8.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/luxon": "^3.7.6",
+    "@types/node": "^20.19.43",
+    "@types/pg": "^8.23.1",
+    "@types/turndown": "^5.0.6",
+    "docx": "^9.8.1",
+    "pdf-lib": "^1.17.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  }
+}

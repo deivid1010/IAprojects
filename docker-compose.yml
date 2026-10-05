@@ -1,0 +1,107 @@
+name: clinic-assistant
+
+# Variables comunes de la API y el worker.
+x-backend-env: &backend-env
+  NODE_ENV: production
+  LOG_LEVEL: info
+  DATABASE_URL: postgres://clinic:clinic@postgres:5432/clinic
+  MONGO_URL: mongodb://mongo:27017
+  MONGO_DB: clinic_assistant
+  CLINIC_TIMEZONE: America/Bogota
+  DEFAULT_CLINIC_ID: clinica-vida-sana
+  AWS_REGION: us-east-1
+  SQS_ENDPOINT: http://elasticmq:9324
+  INCOMING_QUEUE_NAME: incoming-messages.fifo
+  WORKER_MAX_ATTEMPTS: 3
+  ENGINE_TIMEOUT_MS: 30000
+
+services:
+  postgres:
+    # Imagen oficial de Postgres 16 con la extensión pgvector incluida.
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: clinic
+      POSTGRES_PASSWORD: clinic
+      POSTGRES_DB: clinic
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clinic -d clinic"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Emula Amazon SQS (FIFO + DLQ). Mismo SDK y mismo código que en AWS.
+  elasticmq:
+    image: softwaremill/elasticmq-native:1.7.1
+    ports:
+      - "${SQS_PORT:-9324}:9324"
+    volumes:
+      - ./infra/elasticmq/elasticmq.conf:/opt/elasticmq.conf:ro
+
+  api:
+    build: ./backend
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      <<: *backend-env
+      PORT: 3000
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      elasticmq:
+        condition: service_started
+
+  worker:
+    build: ./backend
+    command: ["node", "dist/worker.js"]
+    # OPENAI_API_KEY y OPENAI_MODEL salen de backend/.env (no se versiona).
+    # Las variables de "environment" tienen prioridad sobre env_file.
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      <<: *backend-env
+    depends_on:
+      mongo:
+        condition: service_healthy
+      elasticmq:
+        condition: service_started
+      api:
+        condition: service_started # la API aplica migraciones e índices al arrancar
+    restart: unless-stopped
+
+  # Bandeja del coordinador y simulador de paciente.
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: /api
+        VITE_CLINIC_ID: clinica-vida-sana
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      - api
+
+volumes:
+  pg_data:
+  mongo_data:
