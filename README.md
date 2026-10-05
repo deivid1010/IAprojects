@@ -239,29 +239,9 @@ Recorrido completo de un mensaje, con el archivo que se ejecuta en cada paso: [`
 
 ### Producción esperada (AWS)
 
-<!-- ![Arquitectura en AWS](docs/images/arquitectura-aws.png) -->
-
 Diseño para **50 clínicas y 20.000 mensajes por día**, serverless y gestionado:
 
-```mermaid
-flowchart LR
-    WA([WhatsApp<br/>Cloud API]) --> WAF1[AWS WAF] --> APIGW[API Gateway]
-    U([Coordinador]) --> CF[CloudFront] --> S3W[(S3<br/>panel estático)]
-    CF --> APIGW
-    APIGW -->|JWT| COG[Cognito]
-    APIGW --> LI[Lambda<br/>ingesta] --> SQS[[SQS FIFO<br/>+ DLQ]]
-    SQS --> LW[Lambda<br/>worker]
-    subgraph VPC privada
-        LW --> PROXY[RDS Proxy] --> RDS[(RDS PostgreSQL<br/>+ pgvector)]
-        LW --> DDB[(DocumentDB)]
-        LI --> DDB
-    end
-    LW -->|NAT Gateway| OAI{{OpenAI}}
-    LW -->|NAT Gateway| WA
-    LW --> SM[Secrets Manager / KMS]
-    LW --> SNS[SNS / EventBridge<br/>escalamientos]
-    LW --> CW[CloudWatch + X-Ray]
-```
+![Arquitectura en AWS](docs/images/arquitectura-AWS-pruebaWekall.png)
 
 | Local | AWS | Por qué |
 |---|---|---|
