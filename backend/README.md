@@ -111,9 +111,13 @@ Crea la clínica ficticia **Clínica Vida Sana** (Cali, `America/Bogota`): 2 sed
 | PUT | `/settings/ai` | `{ api_key }`: la valida contra OpenAI y, si sirve, la guarda cifrada (400 si OpenAI la rechaza; 503 sin `SETTINGS_ENCRYPTION_KEY`). |
 | DELETE | `/settings/ai` | Borra la key del panel (vuelve a usarse la del `.env`, si existe). |
 | POST | `/settings/ai/test` | Prueba la key en uso contra OpenAI. |
+| GET | `/settings/prompt` | Prompt del asistente de la clínica (o el original si no lo ha editado), el original y las variables disponibles. |
+| PUT | `/settings/prompt` | `{ template }`: guarda el prompt. 400 si faltan las variables obligatorias (`{{fecha_actual}}`, `{{datos_para_agendar}}`, `{{aviso_agenda}}`), si hay una desconocida o si supera 20.000 caracteres. |
+| DELETE | `/settings/prompt` | Restaura el prompt original. |
 
 | GET | `/agenda` | Agenda generada desde la base de conocimiento: sedes, servicios, profesionales con horarios y el estado de la última generación (advertencias, descartes, ambigüedades). |
 | POST | `/agenda/regenerate` | Regenera la agenda desde los documentos (en segundo plano, 202). |
+| GET | `/agenda/calendar?from=&to=` | Calendario (fechas `YYYY-MM-DD` en hora de la clínica, hasta 62 días): por día y profesional, bloques de atención, citas confirmadas y tramos libres para agendar. |
 
 Las rutas `/conversations*`, `/knowledge*`, `/settings*` y `/agenda*` son del coordinador y operan sobre una clínica. En local se toma del header `X-Clinic-Id` o de `DEFAULT_CLINIC_ID`; en producción saldría del token de Cognito.
 

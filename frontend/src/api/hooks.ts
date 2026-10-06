@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
 import type { ConversationStatus } from './types';
 
@@ -14,7 +14,9 @@ export const keys = {
   conversation: (id: string) => ['conversation', id] as const,
   knowledge: ['knowledge'] as const,
   aiSettings: ['ai-settings'] as const,
+  prompt: ['prompt'] as const,
   agenda: ['agenda'] as const,
+  calendar: (from: string, to: string) => ['agenda', 'calendar', from, to] as const,
   knowledgeDoc: (slug: string) => ['knowledge', slug] as const,
 };
 
@@ -96,6 +98,19 @@ export function useAiSettingsMutations() {
   };
 }
 
+export function usePrompt() {
+  return useQuery({ queryKey: keys.prompt, queryFn: api.prompt.get });
+}
+
+export function usePromptMutations() {
+  const qc = useQueryClient();
+  const setStatus = (status: Awaited<ReturnType<typeof api.prompt.get>>) => qc.setQueryData(keys.prompt, status);
+  return {
+    save: useMutation({ mutationFn: api.prompt.save, onSuccess: setStatus }),
+    reset: useMutation({ mutationFn: api.prompt.reset, onSuccess: setStatus }),
+  };
+}
+
 // --- Agenda -----------------------------------------------------------------------
 
 /** Mientras la agenda se está generando, se consulta cada 2 s. */
@@ -110,4 +125,14 @@ export function useAgenda() {
 export function useRegenerateAgenda() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: api.agenda.regenerate, onSuccess: () => qc.invalidateQueries({ queryKey: keys.agenda }) });
+}
+
+/** Citas y tramos libres de un rango de fechas. Se refresca solo: el asistente agenda en cualquier momento. */
+export function useAgendaCalendar(from: string, to: string) {
+  return useQuery({
+    queryKey: keys.calendar(from, to),
+    queryFn: () => api.agenda.calendar(from, to),
+    placeholderData: keepPreviousData,
+    refetchInterval: 15000,
+  });
 }

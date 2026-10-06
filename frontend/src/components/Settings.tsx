@@ -3,11 +3,13 @@ import { useAiSettings, useAiSettingsMutations } from '../api/hooks';
 import { formatDateTime } from '../lib/format';
 import { AgendaView } from './AgendaView';
 import { Knowledge } from './Knowledge';
+import { Modal } from './Modal';
+import { PromptEditor } from './PromptEditor';
 import { ErrorState, Loading } from './states';
 
 type Section = 'ia' | 'conocimiento' | 'agenda';
 
-/** Configuración del cliente: modelo de IA (API key), base de conocimiento y la agenda que se genera desde ella. */
+/** Configuración del cliente: modelo de IA (API key y prompt), base de conocimiento y la agenda que se genera desde ella. */
 export function Settings() {
   const [section, setSection] = useState<Section>('ia');
   return (
@@ -38,17 +40,17 @@ const SOURCE_LABEL = { panel: 'Configurada en este panel', env: 'Archivo .env de
 function AiSettings() {
   const status = useAiSettings();
   const { save, remove, test } = useAiSettingsMutations();
-  const [key, setKey] = useState('');
+  const [editing, setEditing] = useState(false);
 
   if (status.isPending) return <Loading label="Cargando configuración…" />;
   if (status.isError) return <ErrorState error={status.error} onRetry={() => void status.refetch()} />;
   const s = status.data;
+  const keyAction = s.source === 'panel' ? 'Reemplazar API key' : 'Configurar API key';
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!key.trim()) return;
+  function openEditor() {
+    save.reset();
     test.reset();
-    save.mutate(key.trim(), { onSuccess: () => setKey('') });
+    setEditing(true);
   }
 
   return (
@@ -90,6 +92,9 @@ function AiSettings() {
         </dl>
 
         <div className="row-actions">
+          <button className="btn btn-small btn-primary" onClick={openEditor}>
+            {keyAction}
+          </button>
           <button className="btn btn-small" onClick={() => test.mutate()} disabled={test.isPending || !s.configured}>
             {test.isPending ? 'Probando…' : 'Probar conexión'}
           </button>
@@ -103,6 +108,7 @@ function AiSettings() {
             </button>
           )}
         </div>
+        {save.isSuccess && !editing && <p className="banner banner-ok">API key guardada ({save.data.masked}). El asistente ya la está usando.</p>}
         {test.isSuccess &&
           (test.data.ok ? (
             <p className="banner banner-ok">Conexión correcta: la key funciona y tiene acceso a {s.model}.</p>
@@ -113,38 +119,57 @@ function AiSettings() {
         {remove.isError && <ErrorState error={remove.error} />}
       </section>
 
-      <section className="card">
-        <h2>{s.source === 'panel' ? 'Reemplazar la API key' : 'Configurar una API key'}</h2>
-        {s.can_save ? (
-          <>
-            <p className="muted">
-              Se valida contra OpenAI antes de guardarla. Se guarda cifrada y nunca se vuelve a mostrar completa. Aplica al asistente de inmediato, sin reiniciar
-              nada, y tiene prioridad sobre la del .env.
-            </p>
-            <form className="key-form" onSubmit={submit}>
-              <input
-                type="password"
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                placeholder="sk-proj-…"
-                autoComplete="off"
-                spellCheck={false}
-                aria-label="API key de OpenAI"
-              />
-              <button className="btn btn-primary" type="submit" disabled={save.isPending || key.trim().length < 20}>
-                {save.isPending ? 'Validando con OpenAI…' : 'Validar y guardar'}
-              </button>
-            </form>
-            {save.isSuccess && <p className="banner banner-ok">API key guardada ({save.data.masked}). El asistente ya la está usando.</p>}
-            {save.isError && <ErrorState error={save.error} />}
-          </>
-        ) : (
-          <p className="banner banner-warning">
-            El servidor no tiene clave maestra de cifrado (<code>SETTINGS_ENCRYPTION_KEY</code> en <code>backend/.env</code>), así que no se pueden guardar keys
-            desde el panel. Genérala con <code>openssl rand -base64 32</code> y reinicia la API.
-          </p>
-        )}
-      </section>
+      <PromptEditor />
+
+      {editing && (
+        <Modal title={keyAction} onClose={() => setEditing(false)}>
+          <KeyForm canSave={s.can_save} save={save} onSaved={() => setEditing(false)} />
+        </Modal>
+      )}
     </div>
+  );
+}
+
+function KeyForm({ canSave, save, onSaved }: { canSave: boolean; save: ReturnType<typeof useAiSettingsMutations>['save']; onSaved: () => void }) {
+  const [key, setKey] = useState('');
+
+  if (!canSave) {
+    return (
+      <p className="banner banner-warning">
+        El servidor no tiene clave maestra de cifrado (<code>SETTINGS_ENCRYPTION_KEY</code> en <code>backend/.env</code>), así que no se pueden guardar keys desde
+        el panel. Genérala con <code>openssl rand -base64 32</code> y reinicia la API.
+      </p>
+    );
+  }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!key.trim()) return;
+    save.mutate(key.trim(), { onSuccess: onSaved });
+  }
+
+  return (
+    <>
+      <p className="muted">
+        Se valida contra OpenAI antes de guardarla. Se guarda cifrada y nunca se vuelve a mostrar completa. Aplica al asistente de inmediato, sin reiniciar nada,
+        y tiene prioridad sobre la del .env.
+      </p>
+      <form className="key-form" onSubmit={submit}>
+        <input
+          type="password"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          placeholder="sk-proj-…"
+          autoComplete="off"
+          spellCheck={false}
+          aria-label="API key de OpenAI"
+          autoFocus
+        />
+        <button className="btn btn-primary" type="submit" disabled={save.isPending || key.trim().length < 20}>
+          {save.isPending ? 'Validando con OpenAI…' : 'Validar y guardar'}
+        </button>
+      </form>
+      {save.isError && <ErrorState error={save.error} />}
+    </>
   );
 }

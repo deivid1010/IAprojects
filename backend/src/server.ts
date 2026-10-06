@@ -1,5 +1,6 @@
 import { pino } from 'pino';
 import { createAgendaSync } from './agenda/setup.js';
+import { AppointmentsRepository } from './appointments/appointmentsRepository.js';
 import { CatalogRepository } from './catalog/catalogRepository.js';
 import { loadEnv } from './config/env.js';
 import { ensureMongoIndexes } from './db/collections.js';
@@ -9,6 +10,7 @@ import { createPgPool, pingPostgres } from './db/postgres.js';
 import { buildApp } from './http/app.js';
 import { KnowledgeService } from './knowledge/knowledgeService.js';
 import { createKnowledge } from './knowledge/setup.js';
+import { PromptSettings } from './settings/promptSettings.js';
 import { createAiCredentials } from './settings/setup.js';
 import { ConversationsRepository } from './messaging/conversationsRepository.js';
 import { IngestService } from './messaging/ingestService.js';
@@ -54,7 +56,8 @@ async function main() {
       conversations,
       knowledge,
       aiSettings,
-      agenda: { sync: agendaSync, catalog },
+      prompt: new PromptSettings(mongo.db),
+      agenda: { sync: agendaSync, catalog, appointments: new AppointmentsRepository(pg) },
       defaultClinicId: env.DEFAULT_CLINIC_ID,
       corsOrigins: env.CORS_ORIGINS,
     },

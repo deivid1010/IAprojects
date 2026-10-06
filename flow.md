@@ -89,7 +89,7 @@ La base de conocimiento es la **única fuente de información** del asistente. S
 
 `backend/src/assistant/openaiEngine.ts`:
 
-1. Arma las instrucciones con `assistant/prompt.ts`: alcance (solo la clínica), reglas, fuente única de información y la fecha y hora actual en Cali. **No incluye datos de la clínica**: todo lo informativo sale de la base de conocimiento.
+1. Arma las instrucciones con `assistant/prompt.ts` a partir de la plantilla de la clínica (editada en el panel y leída con `settings/promptSettings.ts`) o la original: alcance (solo la clínica), reglas, fuente única de información y la fecha y hora actual en Cali, que reemplaza a `{{fecha_actual}}`. **No incluye datos de la clínica**: todo lo informativo sale de la base de conocimiento.
 2. Arma las herramientas para esta clínica con `assistant/tools/index.ts`, cada una con su JSON Schema en modo estricto:
    - `buscar_conocimiento`
    - `consultar_disponibilidad`

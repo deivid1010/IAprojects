@@ -4,12 +4,12 @@ import type { ConversationsRepository } from '../messaging/conversationsReposito
 import type { KnowledgeService } from '../knowledge/knowledgeService.js';
 import type { IngestService } from '../messaging/ingestService.js';
 import type { AiCredentials } from '../settings/aiCredentials.js';
-import type { AgendaSync } from '../agenda/agendaSync.js';
-import type { CatalogRepository } from '../catalog/catalogRepository.js';
-import { agendaRoutes } from './routes/agenda.js';
+import type { PromptSettings } from '../settings/promptSettings.js';
+import { agendaRoutes, type AgendaRouteDeps } from './routes/agenda.js';
 import { conversationRoutes } from './routes/conversations.js';
 import { healthRoutes, type HealthChecks } from './routes/health.js';
 import { knowledgeRoutes } from './routes/knowledge.js';
+import { promptRoutes } from './routes/prompt.js';
 import { settingsRoutes } from './routes/settings.js';
 import { webhookRoutes } from './routes/webhooks.js';
 
@@ -21,7 +21,8 @@ export interface AppDeps {
   conversations: Pick<ConversationsRepository, 'listConversations' | 'countByStatus' | 'getConversationDetail' | 'releaseConversation'>;
   knowledge: Pick<KnowledgeService, 'list' | 'get' | 'upload' | 'remove' | 'reindex' | 'search'>;
   aiSettings: Pick<AiCredentials, 'status' | 'save' | 'remove' | 'test'>;
-  agenda: { sync: Pick<AgendaSync, 'status' | 'schedule'>; catalog: Pick<CatalogRepository, 'findClinicById' | 'findResourcesByClinic'> };
+  prompt: Pick<PromptSettings, 'status' | 'save' | 'reset'>;
+  agenda: AgendaRouteDeps;
   defaultClinicId: string;
   /** Orígenes permitidos para el frontend (CORS). */
   corsOrigins?: string[];
@@ -48,7 +49,8 @@ export function buildApp(deps: AppDeps, opts: FastifyServerOptions = {}) {
   app.register(conversationRoutes(deps.conversations, deps.defaultClinicId));
   app.register(knowledgeRoutes(deps.knowledge, deps.defaultClinicId));
   app.register(settingsRoutes(deps.aiSettings, deps.defaultClinicId));
-  app.register(agendaRoutes(deps.agenda.sync, deps.agenda.catalog, deps.defaultClinicId));
+  app.register(promptRoutes(deps.prompt, deps.defaultClinicId));
+  app.register(agendaRoutes(deps.agenda, deps.defaultClinicId));
 
   return app;
 }

@@ -199,3 +199,20 @@ describe('prompt sin agenda', () => {
     expect((client.requests[0]!.tools as { name: string }[]).map((t) => t.name)).toEqual(['buscar_conocimiento', 'escalar_a_humano']);
   });
 });
+
+describe('prompt editado por la clínica', () => {
+  it('usa la plantilla de la clínica con las variables reemplazadas', async () => {
+    const client = new ScriptedClient([{ text: 'ok' }]);
+    const asked: string[] = [];
+    const engine = new OpenAIEngine(
+      async () => client,
+      (i) => buildToolRegistry(i.clinic, { agenda: fakeAgenda().agenda, knowledge: fakeKnowledge() }),
+      { model: 'gpt-test', reasoningEffort: 'low', maxToolIterations: 3, maxOutputTokens: 500 },
+      async (clinicId) => (asked.push(clinicId), 'Eres Sofi, asistente de la clínica.{{aviso_agenda}}{{datos_para_agendar}}\nHoy: {{fecha_actual}}'),
+    );
+    await run(engine);
+    expect(asked).toEqual([testClinic._id]);
+    expect(client.requests[0]!.instructions).toMatch(/^Eres Sofi, asistente de la clínica\./);
+    expect(client.requests[0]!.instructions).toMatch(/Hoy: lunes 5 de octubre de 2026, 10:40/);
+  });
+});

@@ -31,9 +31,17 @@ export function fakeAppDeps(overrides: Partial<AppDeps> = {}): AppDeps {
       remove: async () => ({ configured: false, source: null, masked: null, updated_at: null, model: 'gpt-test', can_save: true }),
       test: async () => ({ ok: false, reason: 'invalid_key', message: 'sin key', source: null }),
     },
+    prompt: {
+      status: async () => ({ template: 'x', default_template: 'x', is_default: true, updated_at: null, variables: [] as never }),
+      save: async () => {
+        throw new Error('no implementado en el fake');
+      },
+      reset: async () => ({ template: 'x', default_template: 'x', is_default: true, updated_at: null, variables: [] as never }),
+    },
     agenda: {
       sync: { status: async () => null, schedule: () => {} },
       catalog: { findClinicById: async () => null, findResourcesByClinic: async () => [] },
+      appointments: { findConfirmedOverlapping: async () => [] },
     },
     defaultClinicId: 'clinica-test',
     ...overrides,

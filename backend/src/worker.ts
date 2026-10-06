@@ -16,6 +16,7 @@ import { ConversationsRepository } from './messaging/conversationsRepository.js'
 import { LogChannel } from './messaging/outbound/logChannel.js';
 import { createSqsClient, SqsMessageQueue } from './messaging/queue/sqsQueue.js';
 import type { AiCredentials } from './settings/aiCredentials.js';
+import { PromptSettings } from './settings/promptSettings.js';
 import { createAiCredentials, openAIClientFor } from './settings/setup.js';
 import { Worker } from './worker/worker.js';
 
@@ -35,7 +36,7 @@ async function main() {
   // La API key se resuelve por clínica en cada turno (panel o .env): si se
   // cambia en el panel, aplica sin reiniciar el worker.
   const credentials = createAiCredentials(env, mongo.db);
-  const engine = createEngine(env, agenda, pg, credentials);
+  const engine = createEngine(env, agenda, pg, credentials, new PromptSettings(mongo.db));
   log.info({ engine: engine.name, model: env.ASSISTANT_ENGINE === 'openai' ? env.OPENAI_MODEL : null }, 'motor del asistente');
 
   const worker = new Worker(
@@ -69,7 +70,7 @@ async function main() {
  * Motor del asistente. Sin API key o sin base de conocimiento para la clínica,
  * KnowledgeGateEngine responde el mensaje por defecto y escala, sin llamar al LLM.
  */
-function createEngine(env: Env, agenda: LocalAgendaProvider, pg: PgPool, credentials: AiCredentials): AssistantEngine {
+function createEngine(env: Env, agenda: LocalAgendaProvider, pg: PgPool, credentials: AiCredentials, prompts: PromptSettings): AssistantEngine {
   const { chunks, retriever } = createKnowledge(env, pg, credentials);
   const hasKnowledge = async (clinicId: string) => (await chunks.countForClinic(clinicId)) > 0;
   if (env.ASSISTANT_ENGINE === 'stub') return new KnowledgeGateEngine(new StubEngine(), hasKnowledge);
@@ -88,6 +89,8 @@ function createEngine(env: Env, agenda: LocalAgendaProvider, pg: PgPool, credent
       maxToolIterations: env.ASSISTANT_MAX_TOOL_ITERATIONS,
       maxOutputTokens: env.OPENAI_MAX_OUTPUT_TOKENS,
     },
+    // El prompt se lee por clínica en cada turno (con caché corto): editarlo en el panel aplica sin reiniciar.
+    (clinicId) => prompts.templateFor(clinicId),
   );
   return new KnowledgeGateEngine(llm, hasKnowledge, async (clinicId) => (await credentials.resolveKey(clinicId)) !== null);
 }

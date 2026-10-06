@@ -164,6 +164,15 @@ export interface AiSettingsStatus {
   can_save: boolean;
 }
 
+/** Prompt del asistente. Las variables {{...}} las reemplaza el sistema en cada turno. */
+export interface PromptStatus {
+  template: string;
+  default_template: string;
+  is_default: boolean;
+  updated_at: string | null;
+  variables: { name: string; description: string; example: string }[];
+}
+
 export type AiKeyTest = { ok: true; source: 'panel' | 'env' | null } | { ok: false; reason: string; message: string; source: 'panel' | 'env' | null };
 
 // --- Agenda generada desde la base de conocimiento ------------------------------
@@ -184,4 +193,37 @@ export interface AgendaView {
   locations: { id: string; name: string; address?: string }[];
   services: { id: string; name: string; duration_min: number }[];
   professionals: { id: string; name: string; services: string[]; schedules: { location: string; day: string; start: string; end: string }[] }[];
+}
+
+// --- Calendario de citas ----------------------------------------------------------
+
+export interface CalendarAppointment {
+  id: string;
+  start: string;
+  end: string;
+  patient_name: string;
+  patient_phone: string;
+  service: string;
+  location: string | null;
+}
+
+export interface CalendarProfessional {
+  id: string;
+  name: string;
+  unavailable: string | null;
+  blocks: { location: string | null; start: string; end: string; free: { start: string; end: string }[] }[];
+  appointments: CalendarAppointment[];
+}
+
+/** Horas en HH:mm y fechas YYYY-MM-DD, siempre en la zona horaria de la clínica. */
+export interface CalendarDay {
+  date: string;
+  holiday: boolean;
+  professionals: CalendarProfessional[];
+}
+
+export interface AgendaCalendar {
+  timezone: string;
+  today: string;
+  days: CalendarDay[];
 }

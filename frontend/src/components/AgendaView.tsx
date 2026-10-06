@@ -1,6 +1,7 @@
 import { useAgenda, useRegenerateAgenda } from '../api/hooks';
 import type { AgendaMeta, AgendaView as Agenda } from '../api/types';
 import { formatDateTime } from '../lib/format';
+import { AgendaCalendar } from './AgendaCalendar';
 import { ErrorState, Loading } from './states';
 
 const STATUS: Record<AgendaMeta['status'], { label: string; badge: string }> = {
@@ -14,8 +15,9 @@ const STATUS: Record<AgendaMeta['status'], { label: string; badge: string }> = {
 const DAY_ORDER = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
 /**
- * Agenda generada desde la base de conocimiento (solo lectura): sedes, servicios
- * y profesionales con sus horarios. Se regenera sola al cambiar los documentos.
+ * Agenda generada desde la base de conocimiento (solo lectura): calendario de
+ * citas y horas libres, y las sedes, servicios y profesionales con sus horarios.
+ * Se regenera sola al cambiar los documentos.
  */
 export function AgendaView() {
   const agenda = useAgenda();
@@ -60,6 +62,8 @@ export function AgendaView() {
         </div>
         {regenerate.isError && <ErrorState error={regenerate.error} />}
       </section>
+
+      {professionals.length > 0 && <AgendaCalendar />}
 
       {professionals.length > 0 && <Catalog locations={locations} services={services} professionals={professionals} />}
 

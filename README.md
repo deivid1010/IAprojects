@@ -1,6 +1,6 @@
 # Asistente de agendamiento con IA
 
-Asistente de WhatsApp para clínicas: responde preguntas **solo con la base de conocimiento** de la clínica, consulta la **disponibilidad real** y **agenda citas** sin duplicados, y **escala a un humano** cuando no puede resolver con seguridad. Incluye un panel para el coordinador: bandeja de conversaciones con trazabilidad (herramientas usadas, tokens y costo por respuesta), simulador de paciente y configuración (API key del modelo, base de conocimiento y agenda).
+Asistente de WhatsApp para clínicas: responde preguntas **solo con la base de conocimiento** de la clínica, consulta la **disponibilidad real** y **agenda citas** sin duplicados, y **escala a un humano** cuando no puede resolver con seguridad. Incluye un panel para el coordinador: bandeja de conversaciones con trazabilidad (herramientas usadas, tokens y costo por respuesta), simulador de paciente y configuración (API key y prompt del modelo, base de conocimiento y agenda con calendario de citas).
 
 > Prueba técnica full-stack con IA. Las decisiones de diseño están en [`DECISIONS.md`](DECISIONS.md) y el recorrido de un mensaje por el código, archivo por archivo, en [`flow.md`](flow.md).
 
@@ -30,7 +30,8 @@ Asistente de WhatsApp para clínicas: responde preguntas **solo con la base de c
 | Responde solo con la base de conocimiento | RAG con pgvector. El asistente no recibe datos de la clínica en el prompt: todo lo informativo sale de los documentos. |
 | Agenda citas sin duplicados | Herramientas del LLM validadas por el código. Una restricción `EXCLUDE` en PostgreSQL impide que dos citas del mismo profesional se crucen. |
 | Interpreta fechas en hora de Colombia | "Mañana" se resuelve en código, en `America/Bogota`: a las 10:40 p. m. del día 5, "mañana" es el 6. |
-| Agenda dinámica | Las sedes, servicios y profesionales se generan desde los documentos de la base de conocimiento cada vez que cambian. |
+| Agenda dinámica | Las sedes, servicios y profesionales se generan desde los documentos de la base de conocimiento cada vez que cambian. Un calendario muestra las citas agendadas y las horas libres por día y profesional. |
+| Prompt editable | Cada clínica puede ajustar las instrucciones del asistente desde el panel. Las partes dinámicas (fecha y hora, datos para agendar, aviso de agenda) son variables que el sistema valida y reemplaza en cada turno. |
 | Tolera fallas | Timeout y reintentos del LLM. Si se agotan, el paciente recibe un mensaje de respaldo y la conversación se escala. Sin API key o sin base de conocimiento, responde un mensaje por defecto **sin llamar al LLM**. |
 | Trazabilidad | Por cada turno: modelo, tokens, latencia, herramientas con argumentos y resultados, costo en USD y estado final. Resumen de cada conversación sin usar el LLM. |
 
@@ -119,9 +120,9 @@ Si no había API key al correr el seed, configúrala en el panel y luego usa **C
 
 Abre **http://localhost:5173**.
 
-1. **Configuración → Modelo de IA:** pega tu API key de OpenAI y usa **Validar y guardar**. Se valida contra OpenAI, se guarda cifrada y se aplica de inmediato, sin reiniciar. **Probar conexión** verifica la key en uso.
+1. **Configuración → Modelo de IA:** usa **Configurar API key** (o **Reemplazar API key**), pega la key de OpenAI en la ventana y usa **Validar y guardar**. Se valida contra OpenAI, se guarda cifrada y se aplica de inmediato, sin reiniciar. **Probar conexión** verifica la key en uso. Debajo está el **prompt del asistente**: se puede editar, guardar y restaurar al original; aplica en menos de 30 s.
 2. **Configuración → Base de conocimiento:** revisa los documentos del seed o sube los tuyos (Word `.docx`, PDF, Markdown o texto). Cada documento se parte en fragmentos y se indexa al subirlo. **Probar búsqueda** muestra qué fragmentos recibiría el asistente para una pregunta.
-3. **Configuración → Agenda:** revisa la agenda generada desde los documentos (sedes, servicios y profesionales con horarios), con lo que se descartó y por qué.
+3. **Configuración → Agenda:** revisa la agenda generada desde los documentos (sedes, servicios y profesionales con horarios), con lo que se descartó y por qué. El **calendario** muestra por día las citas y las horas libres; al hacer clic en un día se abre a la derecha el detalle por profesional.
 4. **Simulador de paciente:** escribe como un paciente, por ejemplo *"¿Tienen cita con dermatología mañana en la tarde?"*. "Reenviar el último" manda el mismo `message_id` para comprobar la idempotencia.
 5. **Bandeja:** cada conversación con su estado (en curso, resuelta por IA, cita agendada, escalada). En el detalle: transcripción con métricas por respuesta y las pestañas **Resumen**, **Paciente** y **Técnico** (herramientas con argumentos y resultados, tokens y costo). Las conversaciones escaladas se pueden **devolver a la IA**.
 
@@ -269,9 +270,9 @@ Diseño para **50 clínicas y 20.000 mensajes por día**, serverless y gestionad
 │   │   ├── messaging/       ingesta, cola (SQS/ElasticMQ), conversaciones y resumen sin LLM
 │   │   ├── worker/          procesamiento de cada mensaje, reintentos y respaldo
 │   │   ├── assistant/       motor con tool calling, prompt, guardrails y herramientas del LLM
-│   │   ├── agenda/          disponibilidad, fechas en hora local y agenda dinámica desde documentos
+│   │   ├── agenda/          disponibilidad, calendario, fechas en hora local y agenda dinámica desde documentos
 │   │   ├── knowledge/       extracción (Word, PDF, Markdown), tablas, chunking, embeddings y búsqueda
-│   │   ├── settings/        API key por clínica, cifrada
+│   │   ├── settings/        API key por clínica (cifrada) y prompt editable
 │   │   ├── db/              conexiones, migraciones SQL e índices
 │   │   └── seed/            clínica de prueba y sus documentos
 │   ├── test/                tests unitarios e integración

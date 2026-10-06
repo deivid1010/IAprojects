@@ -1,4 +1,5 @@
 import type {
+  AgendaCalendar,
   AgendaView,
   AiKeyTest,
   AiSettingsStatus,
@@ -8,6 +9,7 @@ import type {
   KnowledgeDocumentDetail,
   KnowledgeDocumentSummary,
   KnowledgeSearchResult,
+  PromptStatus,
   ReindexResult,
   StatusSummary,
   UploadResult,
@@ -106,9 +108,17 @@ export const api = {
     test: () => request<AiKeyTest>('/settings/ai/test', { method: 'POST' }).then((r) => r.body),
   },
 
+  prompt: {
+    get: () => request<PromptStatus>('/settings/prompt').then((r) => r.body),
+    /** El backend rechaza (400) un prompt al que le falten variables obligatorias. */
+    save: (template: string) => request<PromptStatus>('/settings/prompt', { method: 'PUT', body: JSON.stringify({ template }) }).then((r) => r.body),
+    reset: () => request<PromptStatus>('/settings/prompt', { method: 'DELETE' }).then((r) => r.body),
+  },
+
   agenda: {
     get: () => request<AgendaView>('/agenda').then((r) => r.body),
     regenerate: () => request<{ status: string }>('/agenda/regenerate', { method: 'POST' }).then((r) => r.body),
+    calendar: (from: string, to: string) => request<AgendaCalendar>(`/agenda/calendar?from=${from}&to=${to}`).then((r) => r.body),
   },
 
   /** Simula un mensaje entrante de WhatsApp. Devuelve también el código HTTP (202 aceptado, 200 duplicado). */

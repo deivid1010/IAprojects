@@ -94,7 +94,7 @@ Por fases, levantando y probando cada una antes de seguir: infraestructura (Dock
 | Base | Datos | Por qué |
 |---|---|---|
 | **PostgreSQL** | `appointments` (citas), `outbox` y `document_chunks` (embeddings con pgvector) | Las citas son lo único que no puede fallar: un profesional no puede tener dos citas que se crucen. Eso lo garantiza una restricción `EXCLUDE` del esquema, no el código. Los embeddings viven aquí porque pgvector evita otra base. |
-| **MongoDB (DocumentDB en AWS)** | `clinics` (sedes, servicios, campos de agendamiento, reglas, festivos y la agenda generada), `resources` (profesionales con horarios semanales), `knowledge_documents`, `conversations`, `messages`, `turns` (trazas) y `clinic_settings` (API key cifrada) | El catálogo cambia de forma por cliente: una clínica tiene 0, 1 o N sedes, sus propios campos (EPS, documento…) y sus reglas. Las conversaciones y trazas se escriben mucho, se agregan sin modificarse y su forma varía (cada turno trae distintas tools). |
+| **MongoDB (DocumentDB en AWS)** | `clinics` (sedes, servicios, campos de agendamiento, reglas, festivos y la agenda generada), `resources` (profesionales con horarios semanales), `knowledge_documents`, `conversations`, `messages`, `turns` (trazas) `clinic_settings` (API key cifrada) y `clinic_prompts` (prompt editado por la clínica) | El catálogo cambia de forma por cliente: una clínica tiene 0, 1 o N sedes, sus propios campos (EPS, documento…) y sus reglas. Las conversaciones y trazas se escriben mucho, se agregan sin modificarse y su forma varía (cada turno trae distintas tools). |
 
 ### Entidades y relaciones
 
@@ -243,6 +243,13 @@ Las herramientas se declaran al modelo como **function tools** de la Responses A
 
 **Prompt caching:** como la parte estable (instrucciones y definiciones de las tools) va primero y la fecha al final, el prefijo se repite idéntico entre llamadas y OpenAI lo cobra a la décima parte. En la medición real, el 77 % de los tokens de entrada salió del caché.
 
+**Prompt editable por la clínica.** El prompt es una plantilla (`DEFAULT_PROMPT_TEMPLATE`) con tres variables que el sistema reemplaza en cada turno: `{{fecha_actual}}`, `{{datos_para_agendar}}` y `{{aviso_agenda}}`. Desde **Configuración → Modelo de IA** se puede editar el texto completo:
+
+- **Las variables son obligatorias:** sin `{{fecha_actual}}` el modelo no resuelve "el jueves"; sin las otras dos, pierde los datos para agendar o el aviso de que no hay agenda. La API rechaza (400) una plantilla a la que le falte alguna o que tenga una desconocida, y el panel lo muestra antes de guardar.
+- **El original sigue vivo:** si la clínica no editó el prompt, o guarda el texto original, no se crea una copia; así recibe las mejoras futuras del código. "Restaurar original" borra la versión de la clínica. La plantilla por defecto genera exactamente el mismo texto que antes de hacerla editable (verificado byte a byte).
+- **Sin reinicios:** el worker lee la plantilla por clínica en cada turno con un caché de 30 s, igual que la API key.
+- **Trade-off:** editar el texto completo da flexibilidad (tono, nombre del asistente, reglas propias), pero permite borrar las reglas que evitan que el asistente invente o confirme citas que no existen. Lo preferí a dejar fijas esas reglas para darle a cada clínica control completo sobre su asistente; el panel lo advierte y recomienda probar en el simulador. `scripts/eval.ts` y `scripts/chat.ts` siguen usando el prompt original.
+
 **Entrada al modelo:** las instrucciones, las definiciones de las tools y los últimos 20 mensajes de la conversación.
 
 ### Control del ciclo de tool calling
@@ -343,7 +350,7 @@ En capas, porque ninguna sola alcanza:
 - **Detalle** (`GET /conversations/:id`): cada respuesta del asistente trae los turnos que la produjeron (incluidos los intentos fallidos), con las tools que usó, sus argumentos y resultados, tokens y **costo en USD**. El costo se calcula al registrar el turno con el precio vigente del modelo y se guarda, así que si cambian los precios las trazas conservan lo que costó en su momento. Los totales se acumulan en la conversación (`$inc`).
 - **`assistant_pending`:** indica si hay un mensaje del paciente sin responder. Lo usa el frontend para mostrar "el asistente está respondiendo".
 - **Devolver a la IA** (`POST /conversations/:id/release`): una conversación escalada vuelve a `en_curso`. Los mensajes `pendiente_humano` no se reprocesan, porque se asume que el asesor ya los atendió.
-- **Base de conocimiento, configuración y agenda:** `/knowledge` (subir, listar, borrar, reindexar, buscar), `/settings/ai` (guardar, probar y borrar la key) y `/agenda` (ver y regenerar).
+- **Base de conocimiento, configuración y agenda:** `/knowledge` (subir, listar, borrar, reindexar, buscar), `/settings/ai` (guardar, probar y borrar la key), `/settings/prompt` (ver, guardar y restaurar el prompt), `/agenda` (ver y regenerar) y `/agenda/calendar` (citas y horas libres por día).
 - **Clínica del coordinador:** en local viene del header `X-Clinic-Id`. En producción vendría del token de Cognito, nunca de un parámetro que el cliente pueda cambiar. Una conversación de otra clínica responde 404, no 403, para no revelar que existe.
 - **Sin autenticación en la versión local.** Es una simplificación consciente para la prueba; en AWS esas rutas irían detrás de Cognito.
 
@@ -354,9 +361,11 @@ En capas, porque ninguna sola alcanza:
 - **React + Vite + TypeScript**, sin librería de componentes. **TanStack Query** maneja caché, carga, error y reintentos: reintenta solo errores de red o 5xx, nunca un 400 o un 404.
 - **Estados:** cada vista tiene carga, vacío y error con opción de reintentar.
 - **"El asistente está respondiendo"** sale de `assistant_pending`. Mientras es `true`, el detalle se consulta cada 1,5 s; si no, cada 5 s. Descarté WebSocket o SSE: para un coordinador alcanza el polling y evita otra pieza en la infraestructura.
-- **Diseño:** la bandeja a la izquierda y el detalle a la derecha. El detalle muestra la transcripción estilo WhatsApp, con métricas bajo cada respuesta (tiempo del LLM y de cada herramienta, tokens y costo), y un panel con tres pestañas: **Resumen**, **Paciente** y **Técnico** (cada turno con sus tools, argumentos y resultados).
+- **Diseño:** la bandeja a la izquierda y el detalle a la derecha. El detalle muestra la transcripción como chat, con los colores del panel, con métricas bajo cada respuesta (tiempo del LLM y de cada herramienta, tokens y costo), y un panel con tres pestañas: **Resumen**, **Paciente** y **Técnico** (cada turno con sus tools, argumentos y resultados).
 - **Resumen sin LLM:** lo arma el backend con reglas (`messaging/conversationSummary.ts`) a partir de las trazas. Es determinista, instantáneo y no cuesta tokens. Un resumen con LLM sería más natural, pero costaría una llamada por conversación y podría equivocarse sobre lo que pasó; las trazas son la fuente exacta.
 - **Simulador:** un chat que envía cada mensaje a `POST /webhooks/messages` con un `message_id` único y la hora del sistema, como lo haría WhatsApp. Permite reenviar el mismo `message_id` para ver la idempotencia (200 `duplicate`). El caso de "mañana" a las 10:40 p. m. se reproduce con los tests, con Postman (ver el README) y con `npm run chat -- --at 2026-10-06T03:40:00Z`.
+- **Calendario de citas:** `GET /agenda/calendar` arma, por día y profesional, los bloques de atención menos las citas confirmadas, los festivos, las excepciones y la anticipación mínima (`agenda/calendar.ts`, función pura con tests). Los tramos libres no dependen del servicio, a diferencia de `consultar_disponibilidad`, porque el coordinador quiere ver la ocupación del profesional, no los cupos de un servicio. El panel muestra el mes y abre el detalle del día a la derecha solo al hacer clic; se refresca cada 15 s para ver las citas que agenda el asistente.
+- **La API key se cambia en una ventana modal**, no en un formulario siempre visible: la tarjeta muestra el estado y el formulario aparece solo cuando se va a cambiar.
 - **Las fechas se muestran en hora de la clínica**, no en la del navegador.
 - **nginx sirve el panel y reenvía `/api` a la API**, así el navegador habla con un solo origen y no hay CORS (lo encontré al abrir el panel desde `127.0.0.1` en lugar de `localhost`).
 
@@ -601,5 +610,5 @@ Usé **Claude Code** (un agente de programación) durante todo el proyecto: gene
 - **Consumidor del outbox** que publique en EventBridge (notificar al coordinador cuando se agenda o se escala, sincronizar con el sistema de la clínica).
 - **Seguridad:** Cognito en el panel, validación de la firma HMAC de Meta en el webhook (no está en la versión local), Row-Level Security en Postgres y políticas de retención para datos de salud.
 - **Observabilidad:** métricas por clínica (tokens, costo, tasa de escalamiento, latencia p95), alarmas sobre la DLQ y trazas distribuidas con OpenTelemetry/X-Ray desde el webhook hasta el envío.
-- **Varios clientes en la misma plataforma:** cuotas de tokens por clínica, un prompt configurable por cliente con versión y evaluación, y adaptadores de `AgendaProvider` hacia los sistemas de agenda de cada clínica.
+- **Varios clientes en la misma plataforma:** cuotas de tokens por clínica, historial de versiones del prompt de cada cliente con evaluación automática antes de publicarlo, y adaptadores de `AgendaProvider` hacia los sistemas de agenda de cada clínica.
 - **Producto:** aprobación manual antes de publicar una agenda regenerada, indexación asíncrona para documentos grandes, OCR para PDF escaneados (Textract), actualizaciones del panel en tiempo real (WebSocket o SSE) y el canal real de WhatsApp Cloud API.

@@ -42,6 +42,8 @@ export class OpenAIEngine implements AssistantEngine {
     private readonly clientFor: (clinicId: string) => Promise<ResponsesClient | null>,
     private readonly tools: (input: AssistantInput) => ToolRegistry,
     private readonly config: OpenAIEngineConfig,
+    /** Plantilla del prompt de la clínica (editable en el panel); sin ella, la por defecto. */
+    private readonly promptFor?: (clinicId: string) => Promise<string>,
   ) {}
 
   async reply(input: AssistantInput, { signal }: { signal: AbortSignal }): Promise<AssistantReply> {
@@ -49,7 +51,8 @@ export class OpenAIEngine implements AssistantEngine {
     if (!client) throw new Error('La clínica no tiene API key de IA configurada.');
     const registry = this.tools(input);
     const ctx: ToolContext = { clinic: input.clinic, conversation: input.conversation, message: input.message, now: input.now };
-    const instructions = buildInstructions(input.clinic, input.now);
+    const template = this.promptFor ? await this.promptFor(input.clinic._id) : undefined;
+    const instructions = buildInstructions(input.clinic, input.now, template);
 
     // Historial como mensajes de texto. Los resultados de tools de turnos
     // anteriores no se reenvían (se guardan en las trazas): el texto del

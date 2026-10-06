@@ -1,11 +1,14 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, api } from '../api/client';
 import { useConversation } from '../api/hooks';
 import type { WebhookPayload } from '../api/types';
 import { formatDateTime } from '../lib/format';
 import { ErrorState, TypingIndicator } from './states';
+
+// La caja de texto crece con el mensaje hasta 4 líneas (3 saltos); de ahí en adelante hace scroll.
+const COMPOSER_MAX_LINES = 4;
 
 const randomPhone = () => `+57300${String(Math.floor(Math.random() * 1e7)).padStart(7, '0')}`;
 
@@ -69,6 +72,28 @@ export function Simulator() {
     setText('');
   }
 
+  // Enter envía, como en WhatsApp Web; Shift+Enter agrega un salto de línea.
+  function onComposerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      e.currentTarget.form?.requestSubmit();
+    }
+  }
+
+  const composer = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = composer.current;
+    if (!el) return;
+    const style = getComputedStyle(el);
+    const lineHeight = parseFloat(style.lineHeight) || 20;
+    const chrome = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+    const max = lineHeight * COMPOSER_MAX_LINES + chrome;
+    el.style.height = 'auto';
+    const needed = el.scrollHeight + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+    el.style.height = `${Math.min(needed, max)}px`;
+    el.style.overflowY = needed > max ? 'auto' : 'hidden';
+  }, [text]);
+
   function newPatient() {
     setOutgoing(null);
     setPhone(randomPhone());
@@ -126,9 +151,12 @@ export function Simulator() {
         </ol>
 
         <form className="composer" onSubmit={submit}>
-          <input
+          <textarea
+            ref={composer}
+            rows={1}
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onKeyDown={onComposerKeyDown}
             placeholder="Escribe un mensaje…"
             aria-label="Mensaje del paciente"
             maxLength={4096}
